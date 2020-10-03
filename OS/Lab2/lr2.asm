@@ -1,143 +1,166 @@
-TESTPC SEGMENT
-	ASSUME CS:TESTPC, DS:TESTPC, ES:NOTHING, SS:NOTHING
-	ORG 100H
-    start: jmp BEGIN
+TESTPC	   SEGMENT
+ASSUME  CS:TESTPC, DS:TESTPC, ES:NOTHING, SS:NOTHING
+ORG	   100H
+START: JMP BEGIN
 
-ENDL db 13, 10, '$'
-INACCES_MEM db "Inaccesible memory adress      ", 13, 10, '$'
-SEG_ADRESS db "Environment address      ", 13, 10, '$'
-TAIL db "Command line tail    ", '$'
-CONTENT_S db "Environment content ", 13, 10, '$'
-MODULE db "Module path ", '$'
+EOF EQU '$'
 
-PRINT PROC near
-    push dx
-    push ax
-    mov ah, 09h
-    mov dx, di
-    int 21h
-    pop ax
-    pop dx
-    ret
-PRINT endp
+_seg_inaccess 		db 'Inaccessible memory:     ', 0DH,0AH,EOF
+_seg_env		db 'Enviroment adress:     ', 0DH,0AH,EOF
+_tail			db 'Command line tail:  ',EOF
+_endl			db  0DH,0AH,EOF
+_env			db 'Enviroment: ', 0DH,0AH,EOF
+_path			db 'Path: ', 0DH,0AH,EOF
+_empty			db '      ', 0DH,0AH,EOF
 
-WRD_TO_HEX PROC near
-   push BX
-   mov BH,AH
-   call BYTE_TO_HEX
-   mov [DI],AH
-   dec DI
-   mov [DI],AL
-   dec DI
-   mov AL,BH
-   call BYTE_TO_HEX
-   mov [DI],AH
-   dec DI
-   mov [DI],AL
-   pop BX
-   ret
-WRD_TO_HEX ENDP
 
 TETR_TO_HEX PROC near
-   and AL,0Fh
-   cmp AL,09
-   jbe next
-   add AL,07
-next:
-   add AL,30h
-   ret
+	and AL,0Fh
+	cmp AL,09
+	jbe NEXT
+	add AL,07
+NEXT:	add AL,30h
+	ret
 TETR_TO_HEX ENDP
 
 BYTE_TO_HEX PROC near
-   push CX
-   mov AH,AL
-   call TETR_TO_HEX
-   xchg AL,AH
-   mov CL,4
-   shr AL,CL
-   call TETR_TO_HEX 
-   pop CX 
-   ret
+	push CX
+	mov AH,AL
+	call TETR_TO_HEX
+	xchg AL,AH
+	mov CL,4
+	shr AL,CL
+	call TETR_TO_HEX  
+	pop CX
+	ret
 BYTE_TO_HEX ENDP
 
-BEGIN:
+WRD_TO_HEX PROC near
+	push BX
+	mov BH,AH
+	call BYTE_TO_HEX
+	mov [DI],AH
+	dec DI
+	mov [DI],AL
+	dec DI
+	mov AL,BH
+	call BYTE_TO_HEX
+	mov [DI],AH
+	dec DI
+	mov [DI],AL
+	pop BX
+	ret
+WRD_TO_HEX ENDP
 
-    mov ax, cs:[2h]
-    mov di, offset INACCES_MEM
-    push di
-    add di, 29
-    call WRD_TO_HEX
-    pop di
-    call PRINT
+PRINT PROC NEAR
+	push ax
+	mov ah, 09h
+	int 21h
+	pop ax
+	ret
+PRINT ENDP
 
-    mov ax, cs:[2ch]
-    mov di, offset SEG_ADRESS
-    push di
-    add di, 23
-    call WRD_TO_HEX
-    pop di
-    call PRINT
+SEGMENT_INACCESS PROC NEAR
+	mov ax, ds:[02h]	
+   	mov di, offset _seg_inaccess	 
+   	add di, 24
+   	call WRD_TO_HEX
+   	mov dx, offset _seg_inaccess	
+   	call PRINT
+   	ret
+SEGMENT_INACCESS ENDP
 
-    mov di, offset TAIL
-    call PRINT
+SEGMENT_ENVIROMENT PROC NEAR
+	mov ax, ds:[2Ch]
+   	mov di, offset _seg_env
+   	add di, 22
+   	call WRD_TO_HEX	
+   	mov dx, offset _seg_env
+   	call PRINT
+   	ret
+SEGMENT_ENVIROMENT ENDP
+
+TAIL PROC NEAR
+
+	mov dx, offset _tail
+	call PRINT 
 	xor cx, cx
-    mov cl, cs:[80h]
-	cmp cx, 0
-	je TAIL_end	
-	mov si, 81h
+	mov cl, ds:[80h]
+	cmp cx, 0h
+   	je _is_empty
+
+	mov si, [81h]
 	mov ah, 02h
-		
-TAIL_LOOP:
-	mov dl, cs:[si]
+	xor di, di
+tail_loop: 
+	mov dl, cs:[81h+di]
 	int 21h
-	inc si
-	LOOP TAIL_LOOP
-    
-TAIL_end:
-    mov di, offset ENDL
-    call PRINT
+   	inc di
+	loop tail_loop
+_is_empty:
+	mov dx, offset _empty
+_end_tail:
+   	call PRINT
+   	ret
+TAIL ENDP
 
-    mov di, offset CONTENT_S
-    call PRINT
-	mov si, 2Ch
-	mov es, [si]
-	mov si, 0
+CONTENT PROC NEAR
+	mov dx, offset _env
+   	call PRINT
+   	xor di,di
+   	mov ds, ds:[2Ch]
+_str:
+	cmp byte ptr [di], 00h
+	jz _endline
+	mov dl, [di]
 	mov ah, 02h
-        
-CONTENT_S_OUT_LOOP:
-	mov dl, 0
-	cmp dl, es:[si]
-	je CONTENT_S_END
-CONTENT_S_IN_LOOP:
-	mov dl, es:[si]
 	int 21h
-	inc si
-	cmp dl, 0
-	jne CONTENT_S_IN_LOOP
-	jmp CONTENT_S_OUT_LOOP
+	jmp _isEnd
+_endline:
+   	cmp byte ptr [di+1],00h
+   	jz _isEnd
+   	push ds
+   	mov cx, cs
+	mov ds, cx
+	mov dx, offset _endl
+	call PRINT
+	pop ds
+_isEnd:
+	inc di
+	cmp word ptr [di], 0001h
+	jnz _str
+	call PATH
+	ret
+CONTENT ENDP
 
-CONTENT_S_END:
-    mov di, offset ENDL
-    call PRINT	
+PATH PROC NEAR
+_Rpath:
+	push ds
+	mov ax, cs
+	mov ds, ax
+	mov dx, offset _path 
+	call PRINT
+	pop ds
+	add di, 2
+path_loop:
+	cmp byte ptr [di], 00h
+	jz _Pend
+	mov dl, [di]
+	mov ah, 02h
+	int 21h
+	inc di
+	jmp path_loop
+_Pend:
+	ret
+PATH ENDP
 
-    mov di, offset MODULE
-    call PRINT
-    add si, 3
-	
-MODULE_LOOP:
-    mov dl, es:[si]
-    int 21h
-    inc si
-    cmp dl, 0
-    jne MODULE_LOOP
-
-  
-    mov di, offset ENDL
-    call PRINT
-
-	mov ah,4Ch
-    int 21h
-
-
+BEGIN:	
+	call SEGMENT_INACCESS
+	call SEGMENT_ENVIROMENT
+	call TAIL
+	call CONTENT
+	xor al,al
+	mov AH,4Ch
+	int 21h
 TESTPC ENDS
- END START
+	END START;
